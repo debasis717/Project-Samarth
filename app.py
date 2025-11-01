@@ -1,25 +1,41 @@
 import streamlit as st
 import pandas as pd
-import requests  
+import requests  # Use 'requests' library
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_experimental.agents import create_pandas_dataframe_agent
 import re
 
+# --- THIS IS THE FIX: Correct import for the old langchain version ---
+from langchain_core.exceptions import OutputParsingError
 
+# --- 1. CONFIGURATION ---
+# Load secrets from Streamlit's secret manager
+try:
+    YOUR_API_KEY = st.secrets["DATA_GOV_KEY"]
+    YOUR_GEMINI_KEY = st.secrets["GEMINI_KEY"]
+except KeyError:
+    st.error("ERROR: API keys not found. Please add DATA_GOV_KEY and GEMINI_KEY to your Streamlit secrets.")
+    st.stop()
 
-YOUR_API_KEY = "PASTE YOUR API KEY HERE"
-YOUR_GEMINI_KEY = "PASTE YOUR GEMINI KEY HERE" 
 AGRI_RESOURCE_ID = "35be999b-0208-4354-b557-f6ca9a5355de"
 CLIMATE_RESOURCE_ID = "8e0bd482-4aba-4d99-9cb9-ff124f6f1c2f"
 
-
+# --- 2. DATA SOURCING, CLEANING, AND MERGING ---
 @st.cache_data(ttl=3600)  # Cache data for 1 hour
 def load_and_clean_data():
+    
+    # --- THIS IS THE FIX for 403 FORBIDDEN ---
+    # We must add headers to pretend to be a browser
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36',
+        'Referer': 'https://data.gov.in/'
+    }
     
     # --- 1. Fetch Agriculture Data ---
     agri_url = f"https://api.data.gov.in/resource/{AGRI_RESOURCE_ID}?api-key={YOUR_API_KEY}&format=json&limit=500000"
     try:
-        response_agri = requests.get(agri_url)
+        # Add the headers to the request
+        response_agri = requests.get(agri_url, headers=headers)
         response_agri.raise_for_status()
         agri_data = response_agri.json()
     except Exception as e:
@@ -34,7 +50,8 @@ def load_and_clean_data():
     # --- 2. Fetch Climate Data ---
     climate_url = f"https://api.data.gov.in/resource/{CLIMATE_RESOURCE_ID}?api-key={YOUR_API_KEY}&format=json&limit=500000"
     try:
-        response_climate = requests.get(climate_url)
+        # Add the same headers to this request
+        response_climate = requests.get(climate_url, headers=headers)
         response_climate.raise_for_status()
         climate_data = response_climate.json()
     except Exception as e:
@@ -137,7 +154,7 @@ try:
         
         Always state the years for the data you are referencing.""",
         allow_dangerous_code=True,
-        handle_parsing_errors=True  # We will leave this in as a failsafe
+        handle_parsing_errors=True  # Handle any formatting mistakes by the LLM
     )
 except Exception as e:
     st.error(f"Failed to create AI Agent. Check your GEMINI_KEY.")
@@ -154,31 +171,26 @@ if st.button("Get Answer"):
     if question:
         with st.spinner("Analyzing live government data..."):
             try:
+                # Add the parsing config directly to the invoke call
                 response = agent.invoke(question, config={"handle_parsing_errors": True}) 
                 st.write(response['output'])
                 
-            
-            # We will catch the generic 'Exception' and check its text
-            # This avoids all the import errors.
             except Exception as e:
+                # --- THIS IS THE FIX ---
+                # We will catch the parsing error manually
                 error_message = str(e)
-                
-                # First, check for the parsing error
                 if "Could not parse LLM output: " in error_message:
-                    # The agent found the answer but failed to format it.
-                    # We will manually extract the answer from the error message.
-                    final_answer = error_message.split("Could not parse LLM output: ")[-1]
+                    # Extract the text after "Could not parse LLM output: "
+                    final_answer = error_message.split("Could not parse LLM output: ", 1)[-1]
                     # Clean up any backticks
                     final_answer = final_answer.strip().strip('`')
                     st.markdown(final_answer) # Use st.markdown to render newlines
                 
-                # Second, check for the rate limit error
+                # Check for the rate limit error specifically
                 elif "ResourceExhausted" in error_message:
                     st.error("You have hit the free API rate limit. Please wait 1 minute and try again.")
-                
-                # Otherwise, show the generic error
                 else:
+                    # If we can't extract it, just show the error
                     st.error(f"An error occurred while getting the answer: {e}")
     else:
         st.warning("Please enter a question.")
-
