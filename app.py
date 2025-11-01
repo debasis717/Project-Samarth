@@ -5,8 +5,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_experimental.agents import create_pandas_dataframe_agent
 import re
 
-# --- THIS IS THE FIX: Correct import for the old langchain version ---
-from langchain_core.exceptions import OutputParsingError
+# --- THIS IS THE FIX: Removed the failing import ---
+# from langchain_core.exceptions import OutputParsingError (REMOVED)
 
 # --- 1. CONFIGURATION ---
 # Load secrets from Streamlit's secret manager
@@ -24,8 +24,7 @@ CLIMATE_RESOURCE_ID = "8e0bd482-4aba-4d99-9cb9-ff124f6f1c2f"
 @st.cache_data(ttl=3600)  # Cache data for 1 hour
 def load_and_clean_data():
     
-    # --- THIS IS THE FIX for 403 FORBIDDEN ---
-    # We must add headers to pretend to be a browser
+    # Add headers to pretend to be a browser
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36',
         'Referer': 'https://data.gov.in/'
@@ -34,7 +33,6 @@ def load_and_clean_data():
     # --- 1. Fetch Agriculture Data ---
     agri_url = f"https://api.data.gov.in/resource/{AGRI_RESOURCE_ID}?api-key={YOUR_API_KEY}&format=json&limit=500000"
     try:
-        # Add the headers to the request
         response_agri = requests.get(agri_url, headers=headers)
         response_agri.raise_for_status()
         agri_data = response_agri.json()
@@ -50,7 +48,6 @@ def load_and_clean_data():
     # --- 2. Fetch Climate Data ---
     climate_url = f"https://api.data.gov.in/resource/{CLIMATE_RESOURCE_ID}?api-key={YOUR_API_KEY}&format=json&limit=500000"
     try:
-        # Add the same headers to this request
         response_climate = requests.get(climate_url, headers=headers)
         response_climate.raise_for_status()
         climate_data = response_climate.json()
@@ -177,7 +174,7 @@ if st.button("Get Answer"):
                 
             except Exception as e:
                 # --- THIS IS THE FIX ---
-                # We will catch the parsing error manually
+                # We will catch any error and check its text
                 error_message = str(e)
                 if "Could not parse LLM output: " in error_message:
                     # Extract the text after "Could not parse LLM output: "
@@ -194,3 +191,4 @@ if st.button("Get Answer"):
                     st.error(f"An error occurred while getting the answer: {e}")
     else:
         st.warning("Please enter a question.")
+
