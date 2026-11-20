@@ -5,8 +5,6 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_experimental.agents import create_pandas_dataframe_agent
 import re
 
-# --- THIS IS THE FIX: Removed the failing import ---
-# from langchain_core.exceptions import OutputParsingError (REMOVED)
 
 # --- 1. CONFIGURATION ---
 # Load secrets from Streamlit's secret manager
